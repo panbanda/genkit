@@ -113,25 +113,38 @@ func (g *ModelGenerator) WithMessages(messages []*ai.Message) *ModelGenerator {
 				oaiMessages = append(oaiMessages, tm)
 			}
 		case ai.RoleUser:
-			oaiMessages = append(oaiMessages, openai.UserMessage(content))
-
-			parts := []openai.ChatCompletionContentPartUnionParam{}
+			// Check if message contains media
+			hasMedia := false
 			for _, p := range msg.Content {
 				if p.IsMedia() {
-					part := openai.ImageContentPart(
-						openai.ChatCompletionContentPartImageImageURLParam{
-							URL: p.Text,
-						})
-					parts = append(parts, part)
-					continue
+					hasMedia = true
+					break
 				}
 			}
-			if len(parts) > 0 {
+
+			if hasMedia {
+				// Build multipart message with both text and media
+				parts := []openai.ChatCompletionContentPartUnionParam{}
+				for _, p := range msg.Content {
+					if p.IsMedia() {
+						part := openai.ImageContentPart(
+							openai.ChatCompletionContentPartImageImageURLParam{
+								URL: p.Text,
+							})
+						parts = append(parts, part)
+					} else if p.IsText() {
+						part := openai.TextContentPart(p.Text)
+						parts = append(parts, part)
+					}
+				}
 				oaiMessages = append(oaiMessages, openai.ChatCompletionMessageParamUnion{
 					OfUser: &openai.ChatCompletionUserMessageParam{
 						Content: openai.ChatCompletionUserMessageParamContentUnion{OfArrayOfContentParts: parts},
 					},
 				})
+			} else {
+				// Simple text message
+				oaiMessages = append(oaiMessages, openai.UserMessage(content))
 			}
 		default:
 			// ignore parts from not supported roles
